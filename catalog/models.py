@@ -3,10 +3,13 @@ from django.urls import reverse
 import uuid 
 from datetime import date
 from django.contrib.auth.models import User
+from django.forms import ModelForm
+from django.utils.translation import ugettext_lazy  as _
+import catalog.models
 
 class Genre(models.Model):
     name = models.CharField(max_length=200, help_text="Enter a book genre (e.g. Science Fiction, French Poetry etc.)")
-    
+
     def __str__(self):
         return self.name
 
@@ -23,14 +26,11 @@ class Author(models.Model):
     date_of_birth = models.DateField(null=True, blank=True)
     date_of_death = models.DateField('Died', null=True, blank=True)
 
-    
     def get_absolute_url(self):
         return reverse('author-detail', args=[str(self.id)])
 
-
     def __str__(self):
         return '%s, %s' % (self.last_name, self.first_name)
-
 
 
 class Book(models.Model):
@@ -43,7 +43,6 @@ class Book(models.Model):
 
     def display_genre(self):
         return ', '.join([genre.name for genre in self.genre.all()[:3]])
-
     display_genre.short_description = 'Genre'
 
     def get_absolute_url(self):
@@ -51,7 +50,6 @@ class Book(models.Model):
 
     def __str__(self):
         return self.title
-
 
 
 class BookInstance(models.Model):
@@ -79,7 +77,6 @@ class BookInstance(models.Model):
 
     class Meta:
         ordering = ["due_back"]
-
         permissions = (("can_mark_returned", "Set book as returned"),)
 
 
@@ -93,3 +90,24 @@ class Meta:
 
         def get_absolute_url(self):
             return reverse('author-detail', args=[str(self.id)])
+
+class RenewBookModelForm(ModelForm):
+    def clean_due_back(self):
+        data = self.cleaned_data['due_back']
+       
+       # Check if a date is not in the past.
+        if data < datetime.date.today():
+            raise ValidationError(_('Invalid date - renewal in past'))
+
+       # Check if a date is in the allowed range (+4 weeks from today).
+        if data > datetime.date.today() + datetime.timedelta(weeks=4):
+            raise ValidationError(_('Invalid date - renewal more than 4 weeks ahead'))
+
+       # Remember to always return the cleaned data.
+        return data
+
+    class Meta:
+        model = BookInstance
+        fields = ['due_back']
+        labels = {'due_back': _('Renewal date')}
+        help_texts = {'due_back': _('Enter a date between now and 4 weeks (default 3).')}
